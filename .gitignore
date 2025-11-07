@@ -1,0 +1,41 @@
+# Sistema/OS
+.DS_Store
+Thumbs.db
+
+# IDEs/Editor
+.vscode/
+.idea/
+
+# Logs e caches
+*.log
+logs/
+tmp/
+cache/
+.phpunit.result.cache
+
+# Dependências
+vendor/
+composer.phar
+node_modules/
+
+# Builds e cobertura
+dist/
+build/
+coverage/
+
+# Variáveis de ambiente
+.env
+.env.local
+.env.*.local
+
+# Arquivos/arquivos compactados gerados
+*.zip
+*.tar
+*.tar.gz
+.zip/
+
+# Docker
+docker-compose.override.yml
+
+# Galeria (caches/temporários)
+fotos/*

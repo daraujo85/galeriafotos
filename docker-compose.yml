@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: galeria-fotos
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www/html
+      - ./fotos:/var/www/html/fotos
+    restart: unless-stopped
+    networks:
+      - galeria-network
+
+networks:
+  galeria-network:
+    driver: bridge
+
