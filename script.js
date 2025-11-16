@@ -19,6 +19,56 @@ document.addEventListener('DOMContentLoaded', function() {
     updateToolbarButtons();
 });
 
+// Gerar poster (thumb) para vídeos via canvas
+async function generateVideoPoster(foto, width = 400, height = 400) {
+    return new Promise((resolve, reject) => {
+        const video = document.createElement('video');
+        video.src = foto.caminho;
+        video.preload = 'metadata';
+        video.muted = true;
+        video.playsInline = true;
+        video.crossOrigin = 'anonymous';
+
+        const onError = () => reject(new Error('Falha ao carregar vídeo'));
+        video.addEventListener('error', onError, { once: true });
+
+        video.addEventListener('loadeddata', () => {
+            try {
+                const targetTime = Math.min(1, (video.duration || 2) / 2);
+                video.currentTime = targetTime;
+            } catch (e) {
+                reject(e);
+            }
+        }, { once: true });
+
+        video.addEventListener('seeked', () => {
+            try {
+                const vw = video.videoWidth || 640;
+                const vh = video.videoHeight || 360;
+
+                const scale = Math.max(width / vw, height / vh);
+                const scaledW = Math.floor(vw * scale);
+                const scaledH = Math.floor(vh * scale);
+                const offsetX = Math.floor((scaledW - width) / 2);
+                const offsetY = Math.floor((scaledH - height) / 2);
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+
+                // Desenha centralizado (cover)
+                ctx.drawImage(video, -offsetX, -offsetY, scaledW, scaledH);
+
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                resolve(dataUrl);
+            } catch (e) {
+                reject(e);
+            }
+        }, { once: true });
+    });
+}
+
 // Criar item de foto (thumb) dinamicamente
 function createPhotoItem(index, foto) {
     const item = document.createElement('div');
@@ -51,24 +101,59 @@ function createPhotoItem(index, foto) {
     checkboxWrap.appendChild(checkbox);
     item.appendChild(checkboxWrap);
 
-    const img = document.createElement('img');
-    img.src = foto.caminho;
-    img.alt = foto.nome || '';
-    img.loading = 'lazy';
+    if (foto.tipo === 'video') {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'video-thumb';
 
-    // shimmer e eventos de carregamento
-    if (img.complete && img.naturalHeight !== 0) {
-        img.classList.add('loaded');
+        const img = document.createElement('img');
+        img.className = 'video-img shimmer';
+        img.alt = foto.nome || 'Vídeo';
+
+        const play = document.createElement('span');
+        play.className = 'play-badge';
+        play.textContent = '▶';
+
+        const cacheKey = 'poster:' + foto.caminho;
+        let cached = null;
+        try { cached = localStorage.getItem(cacheKey); } catch {}
+
+        if (cached) {
+            img.src = cached;
+            img.classList.add('loaded');
+        } else {
+            generateVideoPoster(foto, 400, 400)
+                .then((dataUrl) => {
+                    img.src = dataUrl;
+                    img.classList.add('loaded');
+                    try { localStorage.setItem(cacheKey, dataUrl); } catch {}
+                })
+                .catch(() => {
+                    img.alt = 'Sem poster do vídeo';
+                });
+        }
+
+        wrapper.appendChild(img);
+        wrapper.appendChild(play);
+        item.appendChild(wrapper);
     } else {
-        img.addEventListener('load', function() {
-            this.classList.add('loaded');
-        }, { once: true });
-        img.addEventListener('error', function() {
-            this.alt = 'Erro ao carregar imagem';
-        }, { once: true });
+        const img = document.createElement('img');
+        img.src = foto.thumb || foto.caminho;
+        img.alt = foto.nome || '';
+        img.loading = 'lazy';
+
+        if (img.complete && img.naturalHeight !== 0) {
+            img.classList.add('loaded');
+        } else {
+            img.addEventListener('load', function() {
+                this.classList.add('loaded');
+            }, { once: true });
+            img.addEventListener('error', function() {
+                this.alt = 'Erro ao carregar imagem';
+            }, { once: true });
+        }
+        item.appendChild(img);
     }
 
-    item.appendChild(img);
     return item;
 }
 
@@ -237,14 +322,52 @@ function updateToolbarButtons() {
 // Abrir lightbox
 function openLightbox(index) {
     if (fotos.length === 0) return;
-    
+
     currentPhotoIndex = index;
     const lightbox = document.getElementById('lightbox');
     const lightboxImage = document.getElementById('lightboxImage');
+    const lightboxVideo = document.getElementById('lightboxVideo');
     const lightboxCounter = document.getElementById('lightboxCounter');
-    
-    lightboxImage.src = fotos[index].caminho;
-    lightboxCounter.textContent = `${index + 1} / ${fotos.length}`;
+    const lightboxDownloadBtn = document.getElementById('lightboxDownloadBtn');
+    const item = fotos[index];
+
+    // Atualiza e mostra
+    if (lightboxDownloadBtn && item) {
+        const filename = (item.caminho || '').split('/').pop() || 'arquivo';
+        lightboxDownloadBtn.href = item.caminho;
+        lightboxDownloadBtn.setAttribute('download', filename);
+        lightboxDownloadBtn.title = `Baixar ${filename}`;
+        lightboxDownloadBtn.style.display = 'grid'; // aparece só com o lightbox
+    }
+
+    if (item.tipo === 'video') {
+        if (lightboxImage) {
+            lightboxImage.style.display = 'none';
+            lightboxImage.src = '';
+        }
+        if (lightboxVideo) {
+            lightboxVideo.style.display = 'block';
+            lightboxVideo.muted = false;
+            lightboxVideo.playsInline = true;
+            lightboxVideo.removeAttribute('src');
+            lightboxVideo.src = item.caminho;
+            try { lightboxVideo.load(); } catch (e) {}
+        }
+    } else {
+        if (lightboxVideo) {
+            try { lightboxVideo.pause(); } catch (e) {}
+            lightboxVideo.style.display = 'none';
+            lightboxVideo.removeAttribute('src');
+        }
+        if (lightboxImage) {
+            lightboxImage.style.display = 'block';
+            lightboxImage.src = item.caminho;
+        }
+    }
+
+    if (lightboxCounter) {
+        lightboxCounter.textContent = `${index + 1} / ${fotos.length}`;
+    }
     lightbox.style.display = 'flex';
     document.body.style.overflow = 'hidden';
 }
@@ -252,27 +375,73 @@ function openLightbox(index) {
 // Fechar lightbox
 function closeLightbox() {
     const lightbox = document.getElementById('lightbox');
-    lightbox.style.display = 'none';
+    const lightboxVideo = document.getElementById('lightboxVideo');
+    const lightboxDownloadBtn = document.getElementById('lightboxDownloadBtn');
+
+    // Parar e descarregar vídeo para não continuar tocando
+    if (lightboxVideo) {
+        try { lightboxVideo.pause(); } catch (e) {}
+        try { lightboxVideo.currentTime = 0; } catch (e) {}
+        lightboxVideo.removeAttribute('src');
+        lightboxVideo.src = '';
+        try { lightboxVideo.load(); } catch (e) {}
+        lightboxVideo.style.display = 'none';
+    }
+    if (lightboxDownloadBtn) {
+        lightboxDownloadBtn.style.display = 'none'; // oculta ao fechar
+        lightboxDownloadBtn.removeAttribute('href');
+        lightboxDownloadBtn.removeAttribute('download');
+    }
+
+    if (lightbox) { lightbox.style.display = 'none'; }
     document.body.style.overflow = '';
 }
 
 // Mudar foto no lightbox
 function changePhoto(direction) {
     if (fotos.length === 0) return;
-    
-    currentPhotoIndex += direction;
-    
-    if (currentPhotoIndex < 0) {
-        currentPhotoIndex = fotos.length - 1;
-    } else if (currentPhotoIndex >= fotos.length) {
-        currentPhotoIndex = 0;
-    }
-    
+
+    currentPhotoIndex = (currentPhotoIndex + direction + fotos.length) % fotos.length;
+    const item = fotos[currentPhotoIndex];
     const lightboxImage = document.getElementById('lightboxImage');
+    const lightboxVideo = document.getElementById('lightboxVideo');
     const lightboxCounter = document.getElementById('lightboxCounter');
-    
-    lightboxImage.src = fotos[currentPhotoIndex].caminho;
-    lightboxCounter.textContent = `${currentPhotoIndex + 1} / ${fotos.length}`;
+    const lightboxDownloadBtn = document.getElementById('lightboxDownloadBtn');
+
+    if (lightboxDownloadBtn && item) {
+        const filename = (item.caminho || '').split('/').pop() || 'arquivo';
+        lightboxDownloadBtn.href = item.caminho;
+        lightboxDownloadBtn.setAttribute('download', filename);
+        lightboxDownloadBtn.title = `Baixar ${filename}`;
+        lightboxDownloadBtn.style.display = 'grid'; // mantém visível enquanto navega
+    }
+
+    if (item && item.tipo === 'video') {
+        if (lightboxImage) {
+            lightboxImage.style.display = 'none';
+            lightboxImage.src = '';
+        }
+        if (lightboxVideo) {
+            lightboxVideo.style.display = 'block';
+            lightboxVideo.removeAttribute('src');
+            lightboxVideo.src = item.caminho;
+            try { lightboxVideo.load(); } catch (e) {}
+        }
+    } else {
+        if (lightboxVideo) {
+            try { lightboxVideo.pause(); } catch (e) {}
+            lightboxVideo.style.display = 'none';
+            lightboxVideo.removeAttribute('src');
+        }
+        if (lightboxImage) {
+            lightboxImage.style.display = 'block';
+            lightboxImage.src = item.caminho;
+        }
+    }
+
+    if (lightboxCounter) {
+        lightboxCounter.textContent = `${currentPhotoIndex + 1} / ${fotos.length}`;
+    }
 }
 
 // Download de foto individual
@@ -446,9 +615,9 @@ function slideshowNext() {
 function handleKeyboard(e) {
     const lightbox = document.getElementById('lightbox');
     const slideshow = document.getElementById('slideshow');
-    
+
     // Lightbox
-    if (lightbox.style.display === 'flex') {
+    if (lightbox && lightbox.style.display === 'flex') {
         if (e.key === 'Escape') {
             closeLightbox();
         } else if (e.key === 'ArrowLeft') {
@@ -457,9 +626,9 @@ function handleKeyboard(e) {
             changePhoto(1);
         }
     }
-    
+
     // Slideshow
-    if (slideshow.style.display === 'flex') {
+    if (slideshow && slideshow.style.display === 'flex') {
         if (e.key === 'Escape') {
             stopSlideshow();
         } else if (e.key === 'ArrowLeft') {

@@ -16,6 +16,8 @@
     ExpiresByType image/png "access plus 1 year"
     ExpiresByType image/gif "access plus 1 year"
     ExpiresByType image/webp "access plus 1 year"
+    AddType video/mp4 .mp4
+    AddType video/webm .webm
 </IfModule>
 
 # Segurança adicional

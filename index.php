@@ -7,7 +7,11 @@ function listarAlbuns() {
     if (is_dir($fotosDir)) {
         $diretorios = scandir($fotosDir);
         foreach ($diretorios as $dir) {
-            if ($dir != '.' && $dir != '..' && is_dir($fotosDir . '/' . $dir)) {
+            // Ignorar diretórios especiais/ocultos e internos
+            if ($dir === '.' || $dir === '..') continue;
+            if ($dir === '.cache' || $dir === 'temp' || strpos($dir, '.') === 0) continue;
+
+            if (is_dir($fotosDir . '/' . $dir)) {
                 $albuns[] = $dir;
             }
         }
@@ -23,16 +27,29 @@ function listarFotos($album) {
     
     if (is_dir($albumPath)) {
         $arquivos = scandir($albumPath);
-        $extensoesPermitidas = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
+        $extensoesPermitidas = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'mp4'];
         
         foreach ($arquivos as $arquivo) {
             $extensao = strtolower(pathinfo($arquivo, PATHINFO_EXTENSION));
             if (in_array($extensao, $extensoesPermitidas)) {
-                $fotos[] = [
-                    'nome' => $arquivo,
-                    'caminho' => $albumPath . '/' . $arquivo,
-                    'url' => urlencode($albumPath . '/' . $arquivo)
-                ];
+                $caminho = $albumPath . '/' . $arquivo;
+                if ($extensao === 'mp4') {
+                    $fotos[] = [
+                        'nome' => $arquivo,
+                        'caminho' => $caminho,
+                        'url' => urlencode($caminho),
+                        'tipo' => 'video',
+                        'thumb' => null
+                    ];
+                } else {
+                    $fotos[] = [
+                        'nome' => $arquivo,
+                        'caminho' => $caminho,
+                        'url' => urlencode($caminho),
+                        'tipo' => 'image',
+                        'thumb' => 'thumb.php?src=' . rawurlencode($caminho) . '&w=400&h=400'
+                    ];
+                }
             }
         }
     }
@@ -175,15 +192,26 @@ $ogDescription = $albumAtual
     </div>
 
     <!-- Lightbox -->
-    <div class="lightbox" id="lightbox" style="display:none;">
+    <div id="lightbox" class="lightbox">
         <button class="lightbox-close" onclick="closeLightbox()">×</button>
         <button class="lightbox-nav lightbox-prev" onclick="changePhoto(-1)"><span class="arrow-left"></span></button>
         <button class="lightbox-nav lightbox-next" onclick="changePhoto(1)"><span class="arrow-right"></span></button>
         <div class="lightbox-content">
-            <img id="lightboxImage" src="" alt="">
-            <div class="lightbox-info">
-                <span id="lightboxCounter"></span>
-                <button class="btn-icon" onclick="downloadCurrentPhoto()" title="Download">📥</button>
+            <img id="lightboxImage" alt="">
+            <video id="lightboxVideo" controls playsinline></video>
+            <div id="lightboxCounter"></div>
+            <!-- Botão de download com ícone (apenas um, sem o antigo .btn-download) -->
+            <a id="lightboxDownloadBtn"
+               class="btn-icon"
+               href="#"
+               download
+               aria-label="Baixar este arquivo"
+               title="Baixar">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 3v10m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </a>
             </div>
         </div>
     </div>
